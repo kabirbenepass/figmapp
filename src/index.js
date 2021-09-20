@@ -1,80 +1,12 @@
-import jp from "jsonpath";
-import { data } from "./test";
 import _ from "lodash";
-
-class Transform {
-  constructor() {
-    this.index = {};
-    this.roots = [];
-    this.register = this._register.bind(this);
-    this.wildcard = {};
-  }
-
-  _register({ elements, kind }) {
-    const base = Object.getPrototypeOf;
-    return {
-      kind,
-      elements,
-      finisher: (cls) => {
-        const name = cls.name;
-
-        if (name in this.index) {
-          throw new Error(`Cannot re-register class ${name}`);
-        }
-        if (!cls.spec || cls.spec == base(cls).spec) {
-          cls.spec = this.wildcard;
-        }
-        this.index[name] = {
-          cls: cls,
-          name: name,
-          cond: cls.spec,
-          children: []
-        };
-
-        let baseClass = base(cls);
-        let baseName = baseClass.name;
-        while (baseName) {
-          if (baseName in this.index) {
-            this.index[name].baseName = baseName;
-            this.index[baseName].children.push(this.index[name]);
-            return cls;
-          } else {
-            baseClass = base(baseClass);
-            baseName = baseClass.name;
-          }
-        }
-        this.roots.push(this.index[name]);
-        return cls;
-      }
-    };
-  }
-
-  run(object, context = {}, options = null) {
-    options = options || this.roots;
-    for (let opt of options) {
-      if (opt.cond == this.wildcard || opt.cond(object)) {
-        const specialized = this.run(object, context, opt.children);
-        if (specialized) {
-          return specialized;
-        } else if (opt.cond != this.wildcard) {
-          return new opt.cls(object, context);
-        }
-      }
-    }
-  }
-}
-
-const transform = new Transform();
+import { getFigmaScreen } from "./figmaAPI";
+import transform from "./transform";
 
 @transform.register
 class Component {
   constructor(object, context) {
-    this.name = object.name;
-    this.type = object.type;
-  }
-
-  render() {
-    return {};
+    this.type = Object.getPrototypeOf(this).constructor.name;
+    this.style = object.style;
   }
 }
 
@@ -82,8 +14,10 @@ class Component {
 class Frame extends Component {
   static spec = (o) =>
     o.type in { FRAME: 1, CANVAS: 1 } && !o.name.startsWith("Button");
+
   constructor(object, context) {
     super(object, context);
+    this.type = "View";
     this.addChildren(object.children, context);
   }
 
@@ -92,9 +26,19 @@ class Frame extends Component {
       .map((c) => transform.run(c, context))
       .filter();
   }
+}
 
-  render() {
-    return {};
+@transform.register
+class Row extends Frame {
+  static spec = _.matches({ name: "Row" });
+
+  constructor(object, context) {
+    super(object, context);
+    this.style = {
+      ...this.style,
+      flex: 1,
+      flexDirection: "row"
+    };
   }
 }
 
@@ -106,10 +50,18 @@ class Button extends Component {
     super(object, context);
     this.title = object.children[0].children[0].name;
   }
+}
 
-  render() {
-    return {};
+@transform.register
+class Text extends Component {
+  static spec = _.matches({ type: "TEXT" });
+
+  constructor(object, context) {
+    super(object, context);
+    this.children = [object.name];
   }
 }
 
-console.log(JSON.stringify(transform.run(data), null, 2));
+const figmaJSON = getFigmaScreen("fakeFigmaIDNumber1");
+const generatedReactCalls = transform.run(figmaJSON);
+console.log(JSON.stringify(generatedReactCalls, null, 2));

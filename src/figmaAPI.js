@@ -1,4 +1,6 @@
-export const data = {
+// This was pulled from https://api.figma.com/v1/files/0ju7SxmTIva45y50fIkCig using my API key
+
+const data = {
   backgroundColor: {
     a: 1.0,
     b: 0.8980392217636108,
@@ -535,3 +537,5 @@ export const data = {
   prototypeStartNodeID: null,
   type: "CANVAS"
 };
+
+export const getFigmaScreen = (id) => data;
